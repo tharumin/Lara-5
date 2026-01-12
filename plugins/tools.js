@@ -1,0 +1,473 @@
+const config = require('../config');
+const { cmd, commands } = require('../command');
+const fetch = require('node-fetch');
+const textPro = require('@sl-code-lords/text-pro-me'); // Import text-pro-me for text transformation
+
+const {fetchJson} = require('../lib/functions');
+const axios = require('axios');
+const cheerio = require("cheerio");
+const emailDataStore = {};
+
+//-----------------------------------------------Calculator-----------------------------------------------
+
+cmd({
+    pattern: "calculator",
+    desc: "Calculate a mathematical expression.",
+    use: ".calc <expression>",
+    react: "📠",    
+    category: "others",
+    filename: __filename
+},
+async (conn, mek, m, {
+    from, args, quoted, body, isCmd, command, q, isGroup, sender, senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, groupMetadata, groupName, participants, groupAdmins, isBotAdmins, isAdmins, reply
+}) => {
+    try {
+        if (args.length === 0) return reply('Please provide a mathematical expression.');
+
+        const expression = args.join(' ');
+        let result;
+
+        try {
+            result = new Function(`return ${expression}`)();
+        } catch (e) {
+            return reply('Invalid mathematical expression.');
+        }
+
+        return await conn.sendMessage(from, { text: `Calculater: ${result}` }, { quoted: mek });
+
+    } catch (e) {
+        console.log(e);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } })
+        reply(`Error: ${e.message}`);
+    }
+});
+
+//-----------------------------------------------Currency Converter-----------------------------------------------
+
+cmd({
+    pattern: "currency",
+    desc: "Convert an amount from one currency to another.",
+    use: ".currency <amount> <source currency> <target currency>",
+    react: "💻", 
+    category: "others",
+    filename: __filename
+},
+async (conn, mek, m, {
+    from, args, quoted, body, isCmd, command, q, isGroup, sender, senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, groupMetadata, groupName, participants, groupAdmins, isBotAdmins, isAdmins, reply
+}) => {
+    try {
+        if (args.length < 3) return reply('Please provide the amount, source currency, and target currency (e.g., 100 USD EUR).');
+
+        const amount = parseFloat(args[0]);
+        const fromCurrency = args[1].toUpperCase();
+        const toCurrency = args[2].toUpperCase();
+        const response = await fetch(`https://api.exchangerate-api.com/v4/latest/${fromCurrency}`);
+        const exchangeData = await response.json();
+
+        if (exchangeData.rates[toCurrency]) {
+            const convertedAmount = (amount * exchangeData.rates[toCurrency]).toFixed(2);
+            return await conn.sendMessage(from, {
+                text: `${amount} ${fromCurrency} is equal to ${convertedAmount} ${toCurrency}`
+            }, { quoted: mek });
+        } else {
+            return reply(`Could not find conversion rate for: ${toCurrency}`);
+        }
+    } catch (e) {
+        console.log(e);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } })
+        reply(`Error: ${e.message}`);
+    }
+});
+
+//---------------------------------------------------------------Reverse Text-----------------------------------------------
+
+cmd({
+    pattern: "reverse",
+    desc: "Reverse the provided text.",
+    react: "💫", 
+    use: ".reverse <text>",
+    category: "others",
+    filename: __filename
+},
+async (conn, mek, m, {
+    from, args, reply
+}) => {
+    try {
+        if (args.length === 0) return reply('Please provide the text to reverse.');
+        const text = args.join(' ');
+        const reversedText = text.split('').reverse().join('');
+        return await conn.sendMessage(from, {
+            text: reversedText
+        }, { quoted: mek });
+    } catch (e) {
+        console.log(e);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } })
+        return reply(`Error: ${e.message}`);
+    }
+});
+
+//Tempmail
+
+cmd({
+    pattern: "tempmail",
+    desc: "Create temporary email address and use it as needed.",
+    react: "📧",
+    use: ".tempmail",
+    category: "others",
+    filename: __filename
+},
+async (conn, mek, m, { from, sender, reply }) => {
+    try {
+        if (!emailDataStore[sender]) {
+            const newEmailData = await tempmail.create();
+            if (!newEmailData || !newEmailData[0]) {
+                return await reply("Request Denied!");
+            }
+
+            const [login, domain] = newEmailData[0].split("@");
+            emailDataStore[sender] = { email: newEmailData[0], login, domain };
+        }
+
+        const emailInfo = emailDataStore[sender];
+        await conn.sendMessage(from, {
+            text: `◈ *NEW MAIL*\n\n◈ *EMAIL* : ${emailInfo.email}\n◈ *LOGIN* : ${emailInfo.login}\n◈ *ADDRESS* : ${emailInfo.domain}\n\n> *© 𝙿𝚘𝚠𝚎𝚛𝚎𝚍 𝙱𝚢 𝚂𝚄𝙷𝙰𝚂  〽️𝙳*`
+        }, { quoted: mek });
+    } catch (e) {
+        console.log(e);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } })
+        return reply("Request Denied!");
+    }
+});
+
+cmd({
+    pattern: "checkmail",
+    desc: "Check mails in your temporary email address.",
+    react: "📧",
+    use: ".checkmail",
+    category: "others",
+    filename: __filename
+},
+async (conn, mek, m, { from, sender, reply }) => {
+    try {
+        const emailInfo = emailDataStore[sender];
+        if (!emailInfo || !emailInfo.email) {
+            return await conn.sendMessage(from, { text: "_You Didn't Create Any Mail_" }, { quoted: mek });
+        }
+
+        const receivedMails = await tempmail.mails(emailInfo.login, emailInfo.domain);
+        if (!receivedMails || receivedMails.length === 0) {
+            return await conn.sendMessage(from, { text: "_EMPTY ➪ No Mails Here_" }, { quoted: mek });
+        }
+
+        for (const mail of receivedMails) {
+            const emailContent = await tempmail.emailContent(emailInfo.login, emailInfo.domain, mail.id);
+            if (emailContent) {
+                const mailInfo = `From ➪ ${mail.from}\nDate ➪ ${mail.date}\nEMAIL ID ➪ [${mail.id}]\nSubject ➪ ${mail.subject}\nContent ➪ ${emailContent}\n\n> *© 𝙿𝚘𝚠𝚎𝚛𝚎𝚍 𝙱𝚢 𝚂𝚄𝙷𝙰𝚂  〽️𝙳*`;
+                await conn.sendMessage(from, { text: mailInfo }, { quoted: mek });
+            }
+        }
+    } catch (e) {
+        console.log(e);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } })
+        return reply("Request Denied!");
+    }
+});
+
+cmd({
+    pattern: "delmail",
+    desc: "Delete temporary email address.",
+    react: "❌",
+    use: ".delmail",
+    category: "others",
+    filename: __filename
+},
+async (conn, mek, m, { from, sender, reply }) => {
+    try {
+        if (emailDataStore[sender]) {
+            delete emailDataStore[sender];
+            return await conn.sendMessage(from, { text: "Deleted the email address." }, { quoted: mek });
+        } else {
+            return await conn.sendMessage(from, { text: "No email address to delete." }, { quoted: mek });
+        }
+    } catch (e) {
+        console.log(e);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } })
+        return reply("Request Denied!");
+    }
+});
+
+const tempmail = {
+    create: async () => {
+        const url = "https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1";
+        try {
+            const response = await axios.get(url);
+            return response.data;
+        } catch (e) {
+            console.log(e);
+            return null;
+        }
+    },
+
+    mails: async (login, domain) => {
+        const url = `https://www.1secmail.com/api/v1/?action=getMessages&login=${login}&domain=${domain}`;
+        try {
+            const response = await axios.get(url);
+            return response.data;
+        } catch (e) {
+            console.log(e);
+            return null;
+        }
+    },
+
+    emailContent: async (login, domain, id) => {
+        const url = `https://www.1secmail.com/api/v1/?action=readMessage&login=${login}&domain=${domain}&id=${id}`;
+        try {
+            const response = await axios.get(url);
+            const emailData = response.data;
+            const htmlContent = emailData.htmlBody;
+
+            const $ = cheerio.load(htmlContent);
+            const textContent = $.text();
+            return textContent;
+        } catch (e) {
+            console.log(e);
+            return null;
+        }
+    }
+};
+
+//Short Url
+
+cmd({
+    pattern: "url",
+    desc: "Shortens a provided URL.",
+    react: "🔗",
+    use: ".url <link>",
+    category: "others",
+    filename: __filename
+},
+async (conn, mek, m, { from, args, reply }) => {
+    try {
+        const match = args.join(' ');
+        
+        if (!match) {
+            return await reply("_Please provide a URL to shorten_");
+        }
+
+        await reply("_Shortening the link..._");
+
+        const url = await scraper.shortenUrl(match);
+
+        if (url) {
+            const msg = `_Here's your shortened link: *${url}*_`;
+            return await conn.sendMessage(from, { text: msg }, { quoted: mek });
+        } else {
+            return await reply("Failed to shorten the URL.");
+        }
+    } catch (e) {
+        console.log(e);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } })
+        return reply(`Error: ${e.message}`);
+    }
+});
+
+//Encode 
+
+cmd({
+    pattern: "encode",
+    desc: "Encode text to Base64",
+    react: "🔤",
+    use: ".encode",
+    category: "others",
+    filename: __filename
+},
+async (conn, mek, m, { from, quoted, body, isCmd, command, args, q, isGroup, sender, senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, groupMetadata, groupName, participants, groupAdmins, isBotAdmins, isAdmins, reply }) => {
+    try {
+        if (!q) return reply("_Please provide text to encode._");
+        await reply("_Encoding..._");
+
+        let response = await fetch(`https://pure-badlands-26930-091903776676.herokuapp.com/misc/base64/encode?text=${encodeURIComponent(q)}`);
+        let data = await response.json();
+
+        if (data && data.result) {
+            await reply(`${data.result}`);
+        } else {
+            await reply("Failed to encode the text.");
+            await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+        }
+    } catch (e) {
+        console.log(e);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+        reply(`${e}`);
+    }
+});
+
+
+//Decode 
+
+cmd({
+    pattern: "decode",
+    desc: "Decode Base64 text",
+    react: "🔡",
+    use: ".decode",  
+    category: "others",
+    filename: __filename
+},
+async (conn, mek, m, { from, quoted, body, isCmd, command, args, q, isGroup, sender, senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, groupMetadata, groupName, participants, groupAdmins, isBotAdmins, isAdmins, reply }) => {
+    try {
+        if (!q) return reply("_Please provide Base64 text to decode._");
+        await reply("SHADOW Decoding...");
+        let response = await fetch(`https://pure-badlands-26930-091903776676.herokuapp.com/misc/base64/decode?text=${encodeURIComponent(q)}`);
+        let data = await response.json();
+        if (data && data.result) {
+            await reply(`${data.result}`);
+        } else {
+            await reply("Failed to decode the text.");
+            await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+        }
+    } catch (e) {
+        console.log(e);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+        reply(`${e}`);
+    }
+});
+
+//npm search
+
+
+
+//ip lookup
+
+cmd({
+    pattern: "iplookup",
+    desc: "Fetch IP location details",
+    react: "🌍", 
+    use: ".iplookup", 
+    category: "others",
+    filename: __filename
+},
+async (conn, mek, m, { from, quoted, body, isCmd, command, args, q, isGroup, sender, senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, groupMetadata, groupName, participants, groupAdmins, isBotAdmins, isAdmins, reply }) => {
+    try {
+        if (!q) return reply("Please provide an IP address.");
+        await reply("Fetching IP details...");
+        let response = await fetch(`https://pure-badlands-26930-091903776676.herokuapp.com/stalker/ip?ip=${encodeURIComponent(q)}`);
+        let data = await response.json();
+        if (data && data.status === "success" && data.data) {
+            let ipInfo = data.data;
+            let message = `*IP Address:* ${ipInfo.ip}\n` +
+                          `*Latitude:* ${ipInfo.location.latitude}\n` +
+                          `*Longitude:* ${ipInfo.location.longitude}\n> *© 𝙿𝚘𝚠𝚎𝚛𝚎𝚍 𝙱𝚢 𝚂𝚄𝙷𝙰𝚂  〽️𝙳*`;
+
+            await reply(message);
+        } else {
+            await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+            await reply("Failed to fetch IP details. Please check the IP address.");
+        }
+    } catch (e) {
+        console.log(e);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+        reply(`${e}`);
+    }
+});
+
+//Github User Search
+
+cmd({
+    pattern: "githubuser",
+    desc: "Fetch GitHub user details",
+    react: "❤",  
+    use: ".githubuser",
+    category: "others",
+    filename: __filename
+},
+async (conn, mek, m, { from, quoted, body, isCmd, command, args, q, isGroup, sender, senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, groupMetadata, groupName, participants, groupAdmins, isBotAdmins, isAdmins, reply }) => {
+    try {
+        if (!q) return reply("Please provide a GitHub username.");
+        await reply("Fetching GitHub user details...");
+        let response = await fetch(`https://pure-badlands-26930-091903776676.herokuapp.com/stalker/gituser?username=${encodeURIComponent(q)}`);
+        let data = await response.json();
+        if (data && data.status === "success" && data.data) {
+            let userInfo = data.data;
+            let caption = `*🚀 Username:* ${userInfo.login}\n` +
+                          `*🚀 Name:* ${userInfo.name}\n` +
+                          `*🚀 Bio:* ${userInfo.bio}\n` +
+                          `*🚀 Location:* ${userInfo.location}\n` +
+                          `*🚀 Public Repos:* ${userInfo.publicRepos}\n` +
+                          `*🚀 Followers:* ${userInfo.followers}\n` +
+                          `*🚀 Following:* ${userInfo.following}\n` +
+                          `*🚀 Profile:* ${userInfo.htmlUrl}\n> *© 𝙿𝚘𝚠𝚎𝚛𝚎𝚍 𝙱𝚢 𝚂𝚄𝙷𝙰𝚂  〽️𝙳*`;
+            await conn.sendMessage(from, { image: { url: userInfo.avatarUrl }, caption: caption }, { quoted: mek });
+        } else {
+            await reply("Failed to fetch GitHub user details. Please check the username.");
+            await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+        }
+    } catch (e) {
+        console.log(e);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+        reply(`${e}`);
+    }
+});
+
+//Storng Password
+
+cmd({
+    pattern: "password",
+    desc: "Generate a strong password.",
+    category: "others",
+    use: ".password",
+    react: "📠",
+    filename: __filename
+},
+async (conn, mek, m, { from, quoted, body, isCmd, command, args, q, isGroup, sender, senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, groupMetadata, groupName, participants, groupAdmins, isBotAdmins, isAdmins, reply }) => {
+    try {
+        const length = args[0] ? parseInt(args[0]) : 12;
+        if (isNaN(length) || length < 8) {
+            return reply('Provide A Length Of At Least 8.');
+        }
+
+        const generatePassword = (len) => {
+            const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+[]{}|;:,.<>?';
+            let password = '';
+            for (let i = 0; i < len; i++) {
+                const randomIndex = crypto.randomInt(0, charset.length);
+                password += charset[randomIndex];
+            }
+            return password;
+        };
+        const password = generatePassword(length);
+        const message = `Please find your generated password below:\n\n> *© 𝙿𝚘𝚠𝚎𝚛𝚎𝚍 𝙱𝚢 𝚂𝚄𝙷𝙰𝚂  〽️𝙳*`;
+        await conn.sendMessage(from, { text: message }, { quoted: mek });
+        await conn.sendMessage(from, { text: password }, { quoted: mek });
+    } catch (e) {
+        console.log(e);
+        reply(`❌ єяяσя gєηєяαтιηg ραѕѕωσя∂: ${e.message}`);
+    }
+});
+
+//text pro
+
+
+cmd({
+    pattern: "textpro",
+    alias: ["texttransform"],
+    react: "✍️",
+    desc: "Transform text into various styles",
+    category: "convert",
+    use: '.textpro <style> <text>',
+    filename: __filename
+},
+async(conn, mek, m, { from, reply, q }) => {
+    try {
+        const [style, ...textArr] = q.split(" ");
+        const text = textArr.join(" "); 
+
+        if (!style || !text) return await reply("Please provide a style and text!");
+
+        const result = await textPro(style, text);
+        await conn.sendMessage(from, { image: { url: result } }, { quoted: mek });
+
+    } catch (error) {
+        console.error(error);
+        reply('An error occurred while processing your request. Please try again later.');
+    }
+});
