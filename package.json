@@ -19,7 +19,7 @@
       "@sl-code-lords/photooxy": "^1.0.1",
       "@sl-code-lords/si-subdl": "^1.1.1",
       "@sl-code-lords/text-pro-me": "^1.0.0",
-      "@whiskeysockets/baileys": "npm:baileys-mod",
+      "@whiskeysockets/baileys": "npm:@rexxhayanasi/elaina-baileys",
       "@xaviabot/fb-downloader": "^1.0.14",
       "@mrnima/tiktok-downloader": "1.0.0",
       "@dark-yasiya/yt-dl.js": "^1.0.5",
